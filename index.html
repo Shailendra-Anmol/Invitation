@@ -115,6 +115,8 @@
   nav.show{transform:none}
   nav a{font-family:'Cinzel',serif;font-size:.68rem;letter-spacing:.3em;text-transform:uppercase;color:var(--gold-hi);opacity:.8;transition:opacity .3s}
   nav a:hover{opacity:1}
+  nav a{padding:3px 0;border-bottom:1px solid transparent}
+  nav a.on{opacity:1;color:#fff1bd;border-bottom-color:var(--gold)}
 
   /* ---------- Envelope intro ---------- */
   #intro{
@@ -436,6 +438,8 @@
   }
   #music:hover{transform:scale(1.1)}
   #music.playing{animation:rot 5s linear infinite}
+  #music.attn{animation:attn 1.8s ease-out infinite}
+  @keyframes attn{0%{box-shadow:0 0 0 0 rgba(244,224,161,.55),0 8px 24px rgba(0,0,0,.4)}70%{box-shadow:0 0 0 16px rgba(244,224,161,0),0 8px 24px rgba(0,0,0,.4)}100%{box-shadow:0 0 0 0 rgba(244,224,161,0),0 8px 24px rgba(0,0,0,.4)}}
   #toast{
     position:fixed;left:50%;bottom:90px;transform:translate(-50%,30px);opacity:0;z-index:170;
     background:var(--night);color:var(--gold-hi);border:1px solid var(--gold);border-radius:40px;padding:12px 26px;
@@ -465,7 +469,10 @@
   @media (min-width:1500px){ .container{max-width:1180px} }
 
   @media (max-width:820px){
-    nav{display:none}
+    nav{justify-content:flex-start;gap:22px;padding:11px 16px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;
+      -webkit-overflow-scrolling:touch;backdrop-filter:none;background:rgba(29,5,11,.97)}
+    nav::-webkit-scrollbar{display:none}
+    nav a{font-size:.58rem;letter-spacing:.2em;white-space:nowrap;flex:0 0 auto}
     .letter{padding:54px 26px}
     .timeline::before{left:18px}
     .t-item,.t-item:nth-child(even){width:100%;margin-left:0;padding:0 0 40px 48px;text-align:left}
@@ -478,7 +485,11 @@
     #couple{--arch-w:calc((100vw - 36px) / 2.55);--arch-h:calc(var(--arch-w) * 1.7)}
     .who h3{font-size:calc(var(--arch-w) * .2)}
     .who > span{letter-spacing:.3em}
-    #hero{padding:84px 18px 120px}
+    #hero{padding:36px 18px 120px}
+    .ganesh{height:clamp(92px,13.5vh,130px);margin:2px auto 8px}
+    .hero-inner .om{font-size:1.9rem;line-height:1.15}
+    .hero-msg{margin:12px 0 4px}
+    .count{margin:4px 0 34px}
     #hero::before{inset:10px}
     #hero::after{inset:16px}
     .scroll-cue{bottom:34px}
@@ -601,7 +612,6 @@
     <div id="countdown" class="count" aria-live="polite"></div>
     <a href="#story" class="btn">Celebrate With Us</a>
   </div>
-  <div class="scroll-cue">Scroll</div>
 </header>
 
 <!-- STORY -->
@@ -803,11 +813,40 @@ function burst(cx,cy,n){
     if(++f<120)requestAnimationFrame(tick);else x.clearRect(0,0,innerWidth,innerHeight);
   })();
 }
+/* ---- Bouncy scroll nudge: 3 small "peeks" down and back after the page opens ---- */
+let userActed=false,nudgeRaf=0,nudgeTimer=0,nudgeCount=0;
+function stopNudge(){userActed=true;cancelAnimationFrame(nudgeRaf);clearTimeout(nudgeTimer)}
+const easeOutBack=t=>{const c=1.5;return 1+(c+1)*Math.pow(t-1,3)+c*Math.pow(t-1,2)};
+const bounceOut=t=>{const n=7.5625,d=2.75;if(t<1/d)return n*t*t;if(t<2/d)return n*(t-=1.5/d)*t+.75;if(t<2.5/d)return n*(t-=2.25/d)*t+.9375;return n*(t-=2.625/d)*t+.984375};
+function nudge(done){
+  if(userActed||document.hidden||scrollY>10)return;
+  const y0=scrollY,dist=Math.min(160,Math.round(innerHeight*.21)),t0=performance.now(),down=650,hold=160,up=1150;
+  (function step(now){
+    if(userActed)return;
+    const t=now-t0;let y;
+    if(t<down)y=dist*easeOutBack(t/down);                       /* drops down with a soft overshoot */
+    else if(t<down+hold)y=dist;
+    else if(t<down+hold+up)y=dist*(1-bounceOut((t-down-hold)/up)); /* springs back and bounces */
+    else{scrollTo({top:y0,behavior:'instant'});if(done)done();return}
+    scrollTo({top:y0+Math.max(0,y),behavior:'instant'});
+    nudgeRaf=requestAnimationFrame(step);
+  })(t0);
+}
+function nextNudge(){
+  if(++nudgeCount>3)return;
+  nudge(()=>{nudgeTimer=setTimeout(nextNudge,2600)});
+}
+function startNudge(){
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  userActed=false;nudgeCount=0;
+  ['touchstart','wheel','keydown','mousedown'].forEach(ev=>addEventListener(ev,stopNudge,{passive:true,once:true}));
+  nudgeTimer=setTimeout(nextNudge,3000);
+}
 let opened=false;
 function openInvite(){
   if(opened)return;opened=true;
-  bgm.play().then(()=>mbtn.classList.add('playing')).catch(()=>{}); /* inside the tap, so phones allow sound */
-  const finish=()=>{intro.classList.add('open');document.body.classList.remove('locked','pre');window.scrollTo(0,0);if(window.__dust)window.__dust(true)};
+  bgm.play().then(()=>mbtn.classList.add('playing')).catch(armMusic); /* a tap lets phones play sound; if blocked (auto-open) wait for the first tap */
+  const finish=()=>{intro.classList.add('open');document.body.classList.remove('locked','pre');window.scrollTo(0,0);if(window.__dust)window.__dust(true);startNudge()};
   if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){finish();return}
   const coin=seal.querySelector('.coin');
   if(coin){ /* stop the flip smoothly on the logo side */
@@ -825,6 +864,13 @@ function openInvite(){
 }
 seal.addEventListener('click',openInvite);
 seal.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' ') openInvite(); });
+/* If nobody taps the logo, the invitation opens by itself after ~11 seconds */
+function tryAuto(){
+  if(opened)return;
+  if(document.hidden){document.addEventListener('visibilitychange',()=>setTimeout(tryAuto,1500),{once:true});return}
+  openInvite();
+}
+setTimeout(tryAuto,11000);
 
 /* ---- Reveal on scroll ---- */
 const io=new IntersectionObserver(es=>es.forEach(e=>{
@@ -838,7 +884,19 @@ addEventListener('scroll',()=>{
   const h=document.documentElement;
   bar.style.width=(h.scrollTop/(h.scrollHeight-h.clientHeight)*100)+'%';
   nav.classList.toggle('show',h.scrollTop>window.innerHeight*.8);
+  if(!navFrame){navFrame=true;requestAnimationFrame(()=>{navFrame=false;setActive()})}
 },{passive:true});
+let navFrame=false;
+const navLinks=[...nav.querySelectorAll('a')], navSecs=navLinks.map(a=>document.querySelector(a.getAttribute('href')));
+function setActive(){
+  if(!nav.classList.contains('show'))return;
+  const y=innerHeight*.35;let cur=-1;
+  navSecs.forEach((sec,i)=>{if(sec&&sec.getBoundingClientRect().top<=y)cur=i});
+  navLinks.forEach((a,i)=>a.classList.toggle('on',i===cur));
+  const on=navLinks[cur];
+  if(on&&nav.scrollWidth>nav.clientWidth)nav.scrollTo({left:on.offsetLeft-(nav.clientWidth-on.offsetWidth)/2,behavior:'smooth'});
+}
+
 
 /* ---- Countdown (to Tilak, 26 Nov 2026, 9:30 AM IST) ---- */
 const target=new Date('2026-11-26T09:30:00+05:30').getTime();
@@ -880,6 +938,20 @@ if('IntersectionObserver' in window){
   document.querySelectorAll('.foil').forEach(el=>fo.observe(el));
 }
 
+/* If the browser blocks sound (auto-open, no tap yet), start the music on the guest's first tap / key press */
+let musicArmed=false;
+function armMusic(){
+  if(musicArmed)return;musicArmed=true;
+  const evs=['pointerup','touchend','click','keydown'];
+  function disarm(){evs.forEach(ev=>removeEventListener(ev,go,true));mbtn.classList.remove('attn')}
+  function go(e){
+    if(e.target&&e.target.closest&&e.target.closest('#music')){disarm();return} /* the music button has its own handler */
+    bgm.play().then(()=>{mbtn.classList.add('playing');disarm()}).catch(()=>{}); /* stay armed until it really starts */
+  }
+  evs.forEach(ev=>addEventListener(ev,go,true));
+  mbtn.classList.add('attn');
+  setTimeout(()=>{if(bgm.paused)toast('Tap anywhere to play music 🎵')},3400);
+}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600)}
 
 /* ---- Music ---- */
